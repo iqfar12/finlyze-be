@@ -9,6 +9,8 @@ import { authGuard } from './middleware/auth.js';
 import analyzeRoute from './routes/analyze.js';
 import chatRoute from './routes/chat.js';
 import healthRoute from './routes/health.js';
+import marketDataRoute from './routes/market-data.js';
+import auditRoute from './routes/audit.js';
 
 const app = new Hono();
 
@@ -37,9 +39,13 @@ app.use('/api/*', authGuard);
 // Per-endpoint rate limiters (stricter than global)
 app.use('/api/analyze', createRateLimiter(env.rateLimitAnalyze));
 app.use('/api/chat', createRateLimiter(env.rateLimitChat));
+app.use('/api/market-data/*', createRateLimiter(env.rateLimitMarketData));
+app.use('/api/audit', createRateLimiter(env.rateLimitAudit));
 
 app.route('/api/analyze', analyzeRoute);
 app.route('/api/chat', chatRoute);
+app.route('/api/market-data', marketDataRoute);
+app.route('/api/audit', auditRoute);
 
 // ── 404 fallback ──────────────────────────────────────────────────────────────
 app.notFound((c) => {

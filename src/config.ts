@@ -27,4 +27,16 @@ export const env = {
 
   // Optional frontend auth key
   apiSecretKey: process.env.API_SECRET_KEY || '',
+
+  // Market data scraper rate limit
+  rateLimitMarketData: {
+    max: parseInt(process.env.RATE_LIMIT_MARKET_DATA_MAX || '60', 10),
+    windowMs: parseInt(process.env.RATE_LIMIT_MARKET_DATA_WINDOW_MS || '3600000', 10),
+  },
+
+  // Audit rate limit (same budget as analyze — LLM-heavy)
+  rateLimitAudit: {
+    max: parseInt(process.env.RATE_LIMIT_AUDIT_MAX || '10', 10),
+    windowMs: parseInt(process.env.RATE_LIMIT_AUDIT_WINDOW_MS || '3600000', 10),
+  },
 } as const;

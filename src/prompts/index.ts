@@ -69,6 +69,88 @@ Keluarkan JSON dengan schema berikut. Semua nilai WAJIB diambil dari data di ata
   return { system, userMessage };
 }
 
+export function buildAuditPrompt(
+  bankStatementText: string,
+  financialReportText: string,
+  period: string
+) {
+  const system = `Kamu adalah auditor keuangan AI yang mendeteksi ketidaksesuaian antara laporan keuangan dan mutasi rekening bank.
+Tugasmu: bandingkan kedua dokumen, identifikasi gap, transaksi mencurigakan, dan temuan audit.
+Aturan ketat:
+- Output HANYA JSON valid sesuai schema. Tidak ada teks, penjelasan, atau markdown di luar JSON.
+- Semua nilai uang dalam integer IDR (tanpa desimal, tanpa pemisah ribuan).
+- "revenue_gap" = reported_revenue - bank_inflow (positif = revenue lebih besar dari inflow).
+- "expense_gap" = reported_expenses - bank_outflow (negatif = outflow lebih besar dari expenses).
+- "cash_gap" = reported_cash_ending - bank_closing_balance.
+- "audit_score": 0–100 (100 = perfectly reconciled). Kurangi poin berdasarkan severity gap dan temuan.
+- "audit_label": "Clean" (90–100), "Minor Issues" (75–89), "Needs Review" (55–74), "High Risk" (0–54).
+- Hanya flag transaksi sebagai suspicious jika ada anomali nyata: vendor tidak dikenal, nominal bulat besar tanpa referensi, pola duplikat.
+- "required_documents": daftar dokumen yang dibutuhkan untuk menyelesaikan rekonsiliasi.`;
+
+  const userMessage = `PERIODE: ${period}
+
+LAPORAN KEUANGAN (Financial Report):
+${financialReportText}
+
+---
+
+MUTASI REKENING BANK (Bank Statement):
+${bankStatementText}
+
+---
+
+Keluarkan JSON dengan schema berikut. Semua angka WAJIB konsisten dengan data di atas:
+{
+  "audit_score": <integer 0-100>,
+  "audit_label": "<Clean|Minor Issues|Needs Review|High Risk>",
+  "period": "<periode yang diaudit>",
+  "summary": "<2-3 kalimat ringkasan hasil audit: konsistensi, gap utama, dan prioritas tindakan>",
+  "reconciliation": {
+    "reported_revenue": <integer IDR dari laporan keuangan>,
+    "bank_inflow": <integer IDR total kredit dari mutasi bank>,
+    "revenue_gap": <integer IDR selisih>,
+    "reported_expenses": <integer IDR dari laporan keuangan>,
+    "bank_outflow": <integer IDR total debit dari mutasi bank>,
+    "expense_gap": <integer IDR selisih>,
+    "reported_cash_ending": <integer IDR saldo akhir dari laporan>,
+    "bank_closing_balance": <integer IDR saldo akhir dari mutasi bank>,
+    "cash_gap": <integer IDR selisih>
+  },
+  "findings": [
+    {
+      "severity": "<high|medium|low>",
+      "title": "<judul temuan singkat>",
+      "description": "<penjelasan spesifik dengan angka>",
+      "amount": <integer IDR nilai gap atau transaksi terkait>,
+      "recommendation": "<tindakan konkret yang harus diambil>"
+    }
+  ],
+  "suspicious_transactions": [
+    {
+      "date": "<YYYY-MM-DD>",
+      "description": "<deskripsi transaksi dari mutasi bank>",
+      "amount": <integer IDR>,
+      "type": "<debit|credit>",
+      "risk": "<high|medium|low>",
+      "reason": "<alasan transaksi ini mencurigakan>"
+    }
+  ],
+  "required_documents": [
+    "<nama dokumen 1>",
+    "<nama dokumen 2>"
+  ],
+  "recommendations": [
+    {
+      "title": "<judul rekomendasi>",
+      "description": "<langkah spesifik yang harus dilakukan>",
+      "priority": "<High|Medium|Low>"
+    }
+  ]
+}`;
+
+  return { system, userMessage };
+}
+
 export function buildChatSystemPrompt(analysisData: Record<string, any>): string {
   const totalIn = analysisData?.metrics?.total_in?.raw ?? 0;
   const totalOut = analysisData?.metrics?.total_out?.raw ?? 0;
