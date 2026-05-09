@@ -37,6 +37,21 @@ export interface APIErrorResponse {
   message: string;
 }
 
+// ── RAG / Chunking types ─────────────────────────────────────────────────────
+export interface TextChunk {
+  id: string;
+  source: 'bank_statement' | 'financial_report';
+  index: number;
+  text: string;
+}
+
+export interface AuditRetrievedContext {
+  revenue: { reportChunks: TextChunk[]; bankChunks: TextChunk[] };
+  expense: { reportChunks: TextChunk[]; bankChunks: TextChunk[] };
+  balance: { reportChunks: TextChunk[]; bankChunks: TextChunk[] };
+  suspicious: { bankChunks: TextChunk[] };
+}
+
 // ── Audit types ───────────────────────────────────────────────────────────────
 export interface AuditRequest {
   bankStatementText: string;

@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import { callAI } from '../services/ai.js';
 import { repairJSON } from '../services/json-repair.js';
 import { buildAuditPrompt } from '../prompts/index.js';
-import type { AuditRequest } from '../types.js';
+import { chunkText } from '../services/chunker.js';
+import { retrieveTopK, AUDIT_QUERIES } from '../services/retriever.js';
+import type { AuditRequest, AuditRetrievedContext } from '../types.js';
 
 const audit = new Hono();
 
@@ -28,11 +30,32 @@ audit.post('/', async (c) => {
   const period = body.period?.trim() || 'Tidak diketahui';
 
   try {
-    const { system, userMessage } = buildAuditPrompt(
-      body.bankStatementText,
-      body.financialReportText,
-      period
-    );
+    // ── 1. Chunk both documents ───────────────────────────────────────────────
+    const bankChunks = chunkText(body.bankStatementText, 'bank_statement');
+    const reportChunks = chunkText(body.financialReportText, 'financial_report');
+
+    // ── 2. Retrieve top-K chunks per audit dimension ──────────────────────────
+    const ctx: AuditRetrievedContext = {
+      revenue: {
+        reportChunks: retrieveTopK(reportChunks, AUDIT_QUERIES.revenue, 3),
+        bankChunks: retrieveTopK(bankChunks, AUDIT_QUERIES.revenue, 3),
+      },
+      expense: {
+        reportChunks: retrieveTopK(reportChunks, AUDIT_QUERIES.expense, 3),
+        bankChunks: retrieveTopK(bankChunks, AUDIT_QUERIES.expense, 3),
+      },
+      balance: {
+        reportChunks: retrieveTopK(reportChunks, AUDIT_QUERIES.balance, 3),
+        bankChunks: retrieveTopK(bankChunks, AUDIT_QUERIES.balance, 3),
+      },
+      suspicious: {
+        // More chunks for anomaly detection to surface edge cases
+        bankChunks: retrieveTopK(bankChunks, AUDIT_QUERIES.suspicious, 5),
+      },
+    };
+
+    // ── 3. Build focused prompt from retrieved context ────────────────────────
+    const { system, userMessage } = buildAuditPrompt(ctx, period);
 
     const raw = await callAI({
       messages: [{ role: 'user', content: userMessage }],

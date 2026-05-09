@@ -1,3 +1,5 @@
+import type { AuditRetrievedContext, TextChunk } from '../types.js';
+
 /**
  * Analysis and Chat prompt builders — extracted from frontend utils.js
  * These stay server-side so prompt logic is never exposed to the client.
@@ -69,13 +71,14 @@ Keluarkan JSON dengan schema berikut. Semua nilai WAJIB diambil dari data di ata
   return { system, userMessage };
 }
 
-export function buildAuditPrompt(
-  bankStatementText: string,
-  financialReportText: string,
-  period: string
-) {
+function formatChunks(chunks: TextChunk[]): string {
+  if (chunks.length === 0) return '(tidak ada data relevan)';
+  return chunks.map((c, i) => `[Bagian ${i + 1}]\n${c.text}`).join('\n\n');
+}
+
+export function buildAuditPrompt(ctx: AuditRetrievedContext, period: string) {
   const system = `Kamu adalah auditor keuangan AI yang mendeteksi ketidaksesuaian antara laporan keuangan dan mutasi rekening bank.
-Tugasmu: bandingkan kedua dokumen, identifikasi gap, transaksi mencurigakan, dan temuan audit.
+Tugasmu: bandingkan konteks yang diberikan per dimensi (revenue, expense, saldo, anomali), lalu keluarkan temuan audit.
 Aturan ketat:
 - Output HANYA JSON valid sesuai schema. Tidak ada teks, penjelasan, atau markdown di luar JSON.
 - Semua nilai uang dalam integer IDR (tanpa desimal, tanpa pemisah ribuan).
@@ -85,21 +88,38 @@ Aturan ketat:
 - "audit_score": 0–100 (100 = perfectly reconciled). Kurangi poin berdasarkan severity gap dan temuan.
 - "audit_label": "Clean" (90–100), "Minor Issues" (75–89), "Needs Review" (55–74), "High Risk" (0–54).
 - Hanya flag transaksi sebagai suspicious jika ada anomali nyata: vendor tidak dikenal, nominal bulat besar tanpa referensi, pola duplikat.
-- "required_documents": daftar dokumen yang dibutuhkan untuk menyelesaikan rekonsiliasi.`;
+- "required_documents": daftar dokumen yang dibutuhkan untuk menyelesaikan rekonsiliasi.
+- Jika suatu bagian bertanda "(tidak ada data relevan)", set nilai terkait ke 0 dan catat sebagai temuan missing data.`;
 
   const userMessage = `PERIODE: ${period}
 
-LAPORAN KEUANGAN (Financial Report):
-${financialReportText}
+── REVENUE ──────────────────────────────────────────
+[Laporan Keuangan]
+${formatChunks(ctx.revenue.reportChunks)}
 
----
+[Mutasi Bank — kredit/masuk]
+${formatChunks(ctx.revenue.bankChunks)}
 
-MUTASI REKENING BANK (Bank Statement):
-${bankStatementText}
+── EXPENSE ──────────────────────────────────────────
+[Laporan Keuangan]
+${formatChunks(ctx.expense.reportChunks)}
 
----
+[Mutasi Bank — debit/keluar]
+${formatChunks(ctx.expense.bankChunks)}
 
-Keluarkan JSON dengan schema berikut. Semua angka WAJIB konsisten dengan data di atas:
+── SALDO AKHIR ──────────────────────────────────────
+[Laporan Keuangan]
+${formatChunks(ctx.balance.reportChunks)}
+
+[Mutasi Bank — closing balance]
+${formatChunks(ctx.balance.bankChunks)}
+
+── TRANSAKSI UNTUK CEK ANOMALI ──────────────────────
+[Mutasi Bank]
+${formatChunks(ctx.suspicious.bankChunks)}
+
+────────────────────────────────────────────────────
+Keluarkan JSON dengan schema berikut. Semua angka WAJIB konsisten dengan konteks di atas:
 {
   "audit_score": <integer 0-100>,
   "audit_label": "<Clean|Minor Issues|Needs Review|High Risk>",
